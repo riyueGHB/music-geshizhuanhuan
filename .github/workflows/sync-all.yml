@@ -2,9 +2,9 @@ name: Ultimate Safe Sync
 
 on:
   schedule:
-    # 每天 UTC 3:15 和 15:15 自动运行（避开整点拥堵）
+    # 每天 UTC 3:15 和 15:15 自动运行
     - cron: '15 3,15 * * *'
-  workflow_dispatch:         # 允许手动触发
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,7 +23,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 自动获取上游仓库（因为你是直接 Fork 的，这里会自动认出原作者）
+          # 自动获取上游（如果是独立仓库，请把下面这行改成写死的 UPSTREAM="原作者/仓库名"）
           UPSTREAM=$(gh api repos/${{ github.repository }} --jq '.parent.full_name' || true)
           if [ "$UPSTREAM" == "null" ] || [ -z "$UPSTREAM" ]; then 
             echo "这不是一个 Fork 仓库，退出。"
@@ -58,13 +58,16 @@ jobs:
               fi
               
               # ==========================================
-              # 🧹 核心清理机制：干掉原作者所有的 Workflows！
+              # 🚫 核心禁用机制：给原作者的 workflow 文件改后缀
               # ==========================================
               mkdir -p .github/workflows
-              find .github/workflows -type f ! -name "sync-all.yml" -delete || true
+              find .github/workflows -type f \( -name "*.yml" -o -name "*.yaml" \) ! -name "sync-all.yml" | while read -r file; do
+                echo "禁用工作流: $file -> $file.disabled"
+                mv "$file" "${file}.disabled"
+              done
               
               git add .github/workflows/
-              git diff --staged --quiet || git commit -m "Auto cleanup foreign workflows"
+              git diff --staged --quiet || git commit -m "Auto disable foreign workflows"
               
               git push origin "$branch" || echo "推送 $branch 失败"
             done
